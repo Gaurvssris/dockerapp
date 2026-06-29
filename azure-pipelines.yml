@@ -10,19 +10,16 @@ pool:
 
 variables:
   imageName: devops-life-app
-  tag: $(Build.BuildId)
   containerName: devops-life-container
-  hostPort: 8080
-  containerPort: 80
+  tag: $(Build.BuildId)
 
 stages:
-
-- stage: Build_And_Deploy
-  displayName: Build and Run Docker Container
+- stage: BuildAndDeploy
+  displayName: Build and Deploy Docker
 
   jobs:
-
   - job: DockerBuild
+    displayName: Docker Build and Run
 
     steps:
 
@@ -33,21 +30,43 @@ stages:
       displayName: Build Docker Image
       inputs:
         command: build
-        dockerfile: '$(Build.SourcesDirectory)/devops-life-app/Dockerfile'
         repository: $(imageName)
+        dockerfile: '$(Build.SourcesDirectory)/devops-life-app/Dockerfile'
         tags: |
           $(tag)
+          latest
 
-    # Stop Existing Container
+    # Show Images
     - task: PowerShell@2
-      displayName: Stop Existing Container
+      displayName: Show Docker Images
       inputs:
         targetType: inline
         script: |
-          docker stop $(containerName) 2>$null
-          docker rm $(containerName) 2>$null
+          Write-Host "===== Docker Images ====="
+          docker images
 
-    # Run New Container
+    # Stop & Remove Existing Container
+    - task: PowerShell@2
+      displayName: Stop and Remove Existing Container
+      inputs:
+        targetType: inline
+        script: |
+          $container = "$(containerName)"
+
+          $exists = docker ps -a --filter "name=$container" --format "{{.Names}}"
+
+          if ($exists) {
+              Write-Host "Stopping container..."
+              docker stop $container
+
+              Write-Host "Removing container..."
+              docker rm $container
+          }
+          else {
+              Write-Host "Container does not exist."
+          }
+
+    # Run Container
     - task: PowerShell@2
       displayName: Run Docker Container
       inputs:
@@ -55,13 +74,30 @@ stages:
         script: |
           docker run -d `
             --name $(containerName) `
-            -p $(hostPort):$(containerPort) `
-            $(imageName):$(tag)
+            -p 8080:80 `
+            $(imageName):latest
 
-    # Verify
+    # Verify Running Container
     - task: PowerShell@2
-      displayName: Verify Running Container
+      displayName: Verify Docker Container
       inputs:
         targetType: inline
         script: |
+          Write-Host "===== Running Containers ====="
           docker ps
+
+          Write-Host "===== Container Logs ====="
+          docker logs $(containerName)
+
+    # Success Message
+    - task: PowerShell@2
+      displayName: Deployment Success
+      inputs:
+        targetType: inline
+        script: |
+          Write-Host ""
+          Write-Host "========================================"
+          Write-Host "Deployment Successful"
+          Write-Host "Application URL:"
+          Write-Host "http://localhost:8080"
+          Write-Host "========================================"
