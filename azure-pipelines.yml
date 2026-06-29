@@ -5,25 +5,63 @@
 trigger:
 - main
 
-resources:
-- repo: self
+pool:
+  name: dockernewagent
 
 variables:
-  tag: '$(Build.BuildId)'
+  imageName: devops-life-app
+  tag: $(Build.BuildId)
+  containerName: devops-life-container
+  hostPort: 8080
+  containerPort: 80
 
 stages:
-- stage: Build
-  displayName: Build image
+
+- stage: Build_And_Deploy
+  displayName: Build and Run Docker Container
+
   jobs:
-  - job: Build
-    displayName: Build
-    pool:
-      name: dockernewagent
+
+  - job: DockerBuild
+
     steps:
+
+    - checkout: self
+
+    # Build Docker Image
     - task: Docker@2
-      displayName: Build an image
+      displayName: Build Docker Image
       inputs:
         command: build
         dockerfile: '$(Build.SourcesDirectory)/devops-life-app/Dockerfile'
+        repository: $(imageName)
         tags: |
           $(tag)
+
+    # Stop Existing Container
+    - task: PowerShell@2
+      displayName: Stop Existing Container
+      inputs:
+        targetType: inline
+        script: |
+          docker stop $(containerName) 2>$null
+          docker rm $(containerName) 2>$null
+
+    # Run New Container
+    - task: PowerShell@2
+      displayName: Run Docker Container
+      inputs:
+        targetType: inline
+        script: |
+          docker run -d `
+            --name $(containerName) `
+            -p $(hostPort):$(containerPort) `
+            $(imageName):$(tag)
+
+    # Verify
+    - task: PowerShell@2
+      displayName: Verify Running Container
+      inputs:
+        targetType: inline
+        script: |
+          docker ps
